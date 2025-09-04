@@ -1,0 +1,58 @@
+#include <iostream>
+#include <ArduinoEigen.h>
+#include "mydnn.h"
+#include "model_data.h"
+
+using namespace std;
+using namespace Eigen;
+
+IOFormat HeavyFmt(StreamPrecision, 0, ", ", ",\n", "[", "]", "[", "]");
+
+const int NUM_X = 6;
+const int NUM_H = 16;
+const int NUM_M = 16;
+const int NUM_Y = 3;
+
+MatrixXd X, H, M, Y;
+MatrixXd WH(NUM_X, NUM_H), BH(1, NUM_H);
+MatrixXd WM(NUM_H, NUM_M), BM(1, NUM_M);
+MatrixXd WY(NUM_M, NUM_Y), BY(1, NUM_Y);
+
+void dnn_test() {
+
+  WH = Map<Matrix<double,NUM_X,NUM_H,RowMajor>>(_W1);
+  BH = Map<MatrixXd>(_B1, 1, NUM_H);  
+  WM = Map<Matrix<double,NUM_H,NUM_M,RowMajor>>(_W2);
+  BM = Map<MatrixXd>(_B2, 1, NUM_M);
+  WY = Map<Matrix<double,NUM_M,NUM_Y,RowMajor>>(_W3);
+  BY = Map<MatrixXd>(_B3, 1, NUM_Y);
+
+  
+  double x_test[] = {
+    0.0667724609375, -0.2745361328125, 0.999969482421875, -0.0494384765625, -1.0, 0.072998046875 };
+
+  long start = micros();
+  X = Map<MatrixXd>(x_test, 1, NUM_X);
+
+  relu_f(H = X*WH + BH);
+  relu_f(M = H*WM + BM);
+  Y = M*WY + BY;
+  long end = micros();
+  Serial.println(end-start);
+  
+  cout << fixed;
+  cout.precision(4);
+  
+  cout << Y.format(HeavyFmt) << endl;
+}
+
+void setup() {
+  
+  Serial.begin(115200);
+  delay(1000);
+
+  dnn_test();
+
+}
+
+void loop() {}
