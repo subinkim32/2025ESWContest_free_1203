@@ -1,0 +1,80 @@
+#include <iostream>
+#include <ArduinoEigen.h>
+#include "mydnn.h"
+#include "model_data.h"
+#include <Arduino.h>
+
+#define MOTOR_PIN 9  // PWM 핀 번호
+#define PWM_CHANNEL 0
+#define PWM_FREQ 5000      // 5kHz
+#define PWM_RESOLUTION 8   // 8비트 (0~255)
+
+using namespace std;
+using namespace Eigen;
+
+IOFormat HeavyFmt(StreamPrecision, 0, ", ", ",\n", "[", "]", "[", "]");
+
+const int NUM_X = 6;
+const int NUM_H = 16;
+const int NUM_M = 16;
+const int NUM_Y = 3;
+
+MatrixXd X, H, M, Y;
+MatrixXd WH(NUM_X, NUM_H), BH(1, NUM_H);
+MatrixXd WM(NUM_H, NUM_M), BM(1, NUM_M);
+MatrixXd WY(NUM_M, NUM_Y), BY(1, NUM_Y);
+
+unsigned long flight_start_time = 0;
+bool thrust_off = false;
+
+void dnn_test() {
+  WH = Map<Matrix<double,NUM_X,NUM_H,RowMajor>>(_W1);
+  BH = Map<MatrixXd>(_B1, 1, NUM_H);  
+  WM = Map<Matrix<double,NUM_H,NUM_M,RowMajor>>(_W2);
+  BM = Map<MatrixXd>(_B2, 1, NUM_M);
+  WY = Map<Matrix<double,NUM_M,NUM_Y,RowMajor>>(_W3);
+  BY = Map<MatrixXd>(_B3, 1, NUM_Y);
+
+  double x_test[] = {
+    0.0667724609375, -0.2745361328125, 0.999969482421875, -0.0494384765625, -1.0, 0.072998046875 };
+
+  long start = micros();
+  X = Map<MatrixXd>(x_test, 1, NUM_X);
+
+  relu_f(H = X*WH + BH);
+  relu_f(M = H*WM + BM);
+  Y = M*WY + BY;
+  long end = micros();
+  Serial.println(end - start);
+
+  cout << fixed;
+  cout.precision(4);
+  cout << Y.format(HeavyFmt) << endl;
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+
+  // ✅ PWM 설정 (ESP32용)
+  ledcSetup(PWM_CHANNEL, PWM_FREQ, PWM_RESOLUTION);
+  ledcAttachPin(MOTOR_PIN, PWM_CHANNEL);
+
+  // 초기 thrust ON (예: 중간 세기)
+  ledcWrite(PWM_CHANNEL, 128);  // 0~255 중 128 (50% PWM duty)
+
+
+  dnn_test();
+  flight_start_time = millis();  // 현재 시간 기록
+}
+
+void loop() {
+  unsigned long current_time = millis();
+
+  if (!thrust_off && current_time - flight_start_time >= 10000) {
+    // 10초 뒤에 thrust 0으로 설정 (착륙 혹은 모터 정지)
+    ledcWrite(PWM_CHANNEL, 0);  // ✅ 10초 후 PWM 0 = 모터 OFF
+    thrust_off = true;
+    Serial.println("Landing: Thrust OFF after 10 seconds.");
+  }
+}
